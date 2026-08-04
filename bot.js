@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-    // Suas Chaves
     const telegramToken = '8927164850:AAEnjdEz_ECUsAMjBrU02cbp25H9t_pl0Rk';
     const telegramChatId = '6196724270';
     const apiFootballKey = '00d6ac3905e17e3cb51b87bccc6ab13e';
@@ -22,19 +21,33 @@ export default async function handler(req, res) {
             const golsVisitante = jogo.goals.away;
             const totalGols = golsCasa + golsVisitante;
             const diferencaGols = Math.abs(golsCasa - golsVisitante);
+            const liga = jogo.league.name;
             
-            // PADRÃO DE ENTRADA PROFISSIONAL:
-            // 1. Tempo de jogo: Entre 70 e 80 minutos
-            // 2. Cenário de pressão: Jogo empatado (diferenca 0) ou diferença de apenas 1 gol.
-            // 3. O jogo não pode estar 0x0 (jogos 0x0 aos 75 min tendem a ter menos ritmo do que jogos 1x1 ou 1x2)
-            if (tempo >= 70 && tempo <= 80 && diferencaGols <= 1 && totalGols >= 1) {
-                
+            // Cria um link inteligente de busca na Bet365 com o nome do time mandante
+            const linkBet365 = `https://www.bet365.com/#/Search/exactMatch?q=${encodeURIComponent(casa)}`;
+
+            let tipoSinal = "";
+            let sugestao = "";
+
+            // 1. PADRÃO PRIMEIRO TEMPO (HT) - Pressão entre 30 e 40 minutos com placar zerado
+            if (tempo >= 30 && tempo <= 40 && totalGols === 0) {
+                tipoSinal = "PRIMEIRO TEMPO (HT)";
+                sugestao = `👉 *Gols:* Over 0.5 HT (Sair 1 gol antes do intervalo)\n👉 *Cantos:* Fique de olho no volume ofensivo para buscar o Asiático HT.`;
+            }
+            // 2. PADRÃO SEGUNDO TEMPO (FT) - Pressão final entre 70 e 80 minutos
+            else if (tempo >= 70 && tempo <= 80 && diferencaGols <= 1) {
+                tipoSinal = "RETA FINAL (FT)";
+                sugestao = `👉 *Gols:* Over ${totalGols + 0.5} FT (Sair mais 1 gol)\n👉 *Cantos:* Ideal para buscar limite de cantos no fim do jogo.`;
+            }
+
+            // Se o jogo se encaixar em algum dos padrões, envia o alerta!
+            if (tipoSinal !== "") {
                 const ambasMarcam = (golsCasa > 0 && golsVisitante > 0) ? "Confirmado ✅" : "Pendente ⏳";
                 
-                // Formatação do Sinal focado nas métricas principais
                 const mensagem = `
-🚨 *PADRÃO DE ALTA PRESSÃO DETECTADO* 🚨
+🚨 *ALERTA: ${tipoSinal}* 🚨
 
+🏆 *Liga:* ${liga}
 ⚽ *Partida:* ${casa} x ${visitante}
 ⏱️ *Tempo:* ${tempo}' minutos
 🥅 *Placar:* ${golsCasa} - ${golsVisitante}
@@ -44,16 +57,21 @@ export default async function handler(req, res) {
 • *Ambas Marcam:* ${ambasMarcam}
 
 🎯 *SUGESTÕES DE ENTRADA:*
-👉 *Mercado de Gols:* Over ${totalGols + 0.5} (Sair mais 1 gol)
-👉 *Mercado de Escanteios:* Fique atento às médias de cantos para buscar o Asiático Final.
+${sugestao}
 
-⚠️ _Partida com forte tendência de ataque na reta final. Avalie o gráfico antes de confirmar a entrada!_
+🔗 *Apostar Agora (Bet365):*
+[Clique aqui para abrir o jogo na Bet365](${linkBet365})
 `;
 
                 await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: telegramChatId, text: mensagem, parse_mode: 'Markdown' })
+                    body: JSON.stringify({ 
+                        chat_id: telegramChatId, 
+                        text: mensagem, 
+                        parse_mode: 'Markdown',
+                        disable_web_page_preview: true // Evita que o Telegram crie um quadro gigante com a imagem do site
+                    })
                 });
                 
                 sinaisEnviados++;
