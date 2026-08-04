@@ -1,7 +1,12 @@
 export default async function handler(req, res) {
+    // 1. Suas Chaves do Telegram e API de Futebol
     const telegramToken = '8927164850:AAEnjdEz_ECUsAMjBrU02cbp25H9t_pl0Rk';
     const telegramChatId = '6196724270';
     const apiFootballKey = '00d6ac3905e17e3cb51b87bccc6ab13e';
+    
+    // 2. Suas Chaves do Banco de Dados (Supabase)
+    const supabaseUrl = 'https://hkxgdrjilcqusykzbxvw.supabase.co'; 
+    const supabaseKey = 'sb_publishable_RfMmJUVVU4Pg8Dl3jRBG1A_FS0_EnXL';
 
     try {
         const response = await fetch('https://v3.football.api-sports.io/fixtures?live=all', {
@@ -23,62 +28,77 @@ export default async function handler(req, res) {
             const diferencaGols = Math.abs(golsCasa - golsVisitante);
             const liga = jogo.league.name;
             
-            // Cria um link inteligente de busca na Bet365 com o nome do time mandante
+            // Link direto e limpo para a Bet365
             const linkBet365 = `https://www.bet365.com/#/Search/exactMatch?q=${encodeURIComponent(casa)}`;
 
             let tipoSinal = "";
             let sugestao = "";
 
-            // 1. PADRÃO PRIMEIRO TEMPO (HT) - Pressão entre 30 e 40 minutos com placar zerado
             if (tempo >= 30 && tempo <= 40 && totalGols === 0) {
                 tipoSinal = "PRIMEIRO TEMPO (HT)";
-                sugestao = `👉 *Gols:* Over 0.5 HT (Sair 1 gol antes do intervalo)\n👉 *Cantos:* Fique de olho no volume ofensivo para buscar o Asiático HT.`;
+                sugestao = `👉 <b>Gols:</b> Over 0.5 HT<br>👉 <b>Cantos:</b> Buscar Asiático HT`;
             }
-            // 2. PADRÃO SEGUNDO TEMPO (FT) - Pressão final entre 70 e 80 minutos
             else if (tempo >= 70 && tempo <= 80 && diferencaGols <= 1) {
                 tipoSinal = "RETA FINAL (FT)";
-                sugestao = `👉 *Gols:* Over ${totalGols + 0.5} FT (Sair mais 1 gol)\n👉 *Cantos:* Ideal para buscar limite de cantos no fim do jogo.`;
+                sugestao = `👉 <b>Gols:</b> Over ${totalGols + 0.5} FT<br>👉 <b>Cantos:</b> Limite de cantos no fim`;
             }
 
-            // Se o jogo se encaixar em algum dos padrões, envia o alerta!
             if (tipoSinal !== "") {
                 const ambasMarcam = (golsCasa > 0 && golsVisitante > 0) ? "Confirmado ✅" : "Pendente ⏳";
                 
                 const mensagem = `
-🚨 *ALERTA: ${tipoSinal}* 🚨
+🚨 <b>ALERTA: ${tipoSinal}</b> 🚨
 
-🏆 *Liga:* ${liga}
-⚽ *Partida:* ${casa} x ${visitante}
-⏱️ *Tempo:* ${tempo}' minutos
-🥅 *Placar:* ${golsCasa} - ${golsVisitante}
+🏆 <b>Liga:</b> ${liga}
+⚽ <b>Partida:</b> ${casa} x ${visitante}
+⏱️ <b>Tempo:</b> ${tempo}' minutos
+🥅 <b>Placar:</b> ${golsCasa} - ${golsVisitante}
 
-📊 *Métricas da Partida:*
-• *Total de Gols Atual:* ${totalGols}
-• *Ambas Marcam:* ${ambasMarcam}
+📊 <b>Métricas:</b>
+• Total de Gols Atual: ${totalGols}
+• Ambas Marcam: ${ambasMarcam}
 
-🎯 *SUGESTÕES DE ENTRADA:*
-${sugestao}
+🎯 <b>SUGESTÕES:</b>
+${sugestao.replace(/<br>/g, '\n')}
 
-🔗 *Apostar Agora (Bet365):*
-[Clique aqui para abrir o jogo na Bet365](${linkBet365})
+🔗 <a href="${linkBet365}">Apostar Agora (Abrir Bet365)</a>
 `;
 
+                // Envia para o Telegram
                 await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         chat_id: telegramChatId, 
                         text: mensagem, 
-                        parse_mode: 'Markdown',
-                        disable_web_page_preview: true // Evita que o Telegram crie um quadro gigante com a imagem do site
+                        parse_mode: 'HTML',
+                        disable_web_page_preview: true
                     })
                 });
                 
+                // Salva no Banco de Dados (Supabase)
+                await fetch(`${supabaseUrl}/rest/v1/historico_sinais`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': supabaseKey,
+                        'Authorization': `Bearer ${supabaseKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        casa: casa,
+                        visitante: visitante,
+                        tempo: tempo,
+                        placar: `${golsCasa} - ${golsVisitante}`,
+                        tipo_sinal: tipoSinal
+                    })
+                });
+
                 sinaisEnviados++;
             }
         }
 
-        res.status(200).json({ status: "Varredura Concluída", analisados: jogos.length, sinaisEnviados });
+        res.status(200).json({ status: "Concluído", analisados: jogos.length, sinaisEnviados });
     } catch (error) {
         res.status(500).json({ status: "Erro", detalhes: error.message });
     }
